@@ -1,4 +1,4 @@
-*ft_csv.txt*  A plugin for CSV Files                 - Vers 0.4  Mar 11, 2010
+*ft_csv.txt*  A plugin for CSV Files                 - Vers 0.4a  Mar 11, 2010
 
 Author:  Christian Brabandt <cb@256bit.org>
 
@@ -20,6 +20,7 @@ differently.
     3.1 Delimiter...............................|csv-delimiter|
     3.2 Column..................................|csv-column|
     3.3 hiGroup.................................|csv-higroup|
+4. CSV Changelog................................|csv-changelog|
 
 ==============================================================================
 1. Installation					*csv-installation*
@@ -127,7 +128,7 @@ will delete column 2.
 -----------
 
 Reinitialize the Plugin. Use this, if you have changed the configuration
-of the plugin (see *csv-configuration* ).
+of the plugin (see |csv-configuration| ).
 
 ==============================================================================
 3. CSV Configuration					  *csv-configuration*
@@ -135,7 +136,7 @@ of the plugin (see *csv-configuration* ).
 The CSV plugin tries to automatically detect the field delimiter for your
 file, cause although often the file is called CSV (comma separated values), a
 semicolon is actually used. The column separator is stored in the buffer-local
-variable (|b:var| delimiter. This delimiter is heavily used, because you need
+variable b:delimiter. This delimiter is heavily used, because you need
 it to define a column. Almost all commands use this variable therefore.
 
 3.1 Delimiter                                                  *csv-delimiter*
@@ -146,10 +147,11 @@ manually, use:
 
 :let g:csv_delim=','
 
-to let the comma be the delimiter. 
+to let the comma be the delimiter. This sets the buffer local delimiter
+variable b:delimiter.
 
 If you changed the delimiter, you should reinitiliaze the plugin using
-:InitCSV
+|InitCSV|
 
 3.2 Column                                                  *csv-column*
 ----------
@@ -183,6 +185,16 @@ variable. You can e.g. define it in your .vimrc:
 
 :let g:csv_hiGroup = "IncSearch"
 
-You need to restart Vim, if you have changed this variable.
+You need to restart Vim, if you have changed this variable or use |InitCSV|
+
+==============================================================================
+4. CSV Changelog					  *csv-changelog*
+
+0.4a Mar, 11	 -fixed documentation
+0.4  Mar, 11	 -introduce |InitCSV|
+		 -better Error handling
+		 -HiColumn now by default highlights the current
+		  column, if no argument is specified.
+0.3  Oct, 28	 -initial Version
 
 vim:tw=78:ts=8:ft=help:norl:

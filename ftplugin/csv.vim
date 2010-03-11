@@ -1,6 +1,6 @@
 " Filetype plugin for editing CSV files."{{{
 " Copyright: C.Brabandt  <cb@256bit.org>
-" Version:   0.4
+" Version:   0.4a
 " Some ideas are take from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
 if v:version < 700 || exists('b:did_ftplugin')
@@ -214,6 +214,11 @@ fu! <SID>Init()"{{{
 	let b:delimiter=<SID>GetDelimiter()
     else
 	let b:delimiter=g:csv_delim
+    endif
+    if empty(b:delimiter)
+	echohl WarningMsg
+	echomsg "CSV: No delimiter found. See :h csv-delimiter to set it manually!"
+	echohl Normal
     endif
     " Pattern for matching a single column
     let b:col='\%(\%([^' . b:delimiter . ']*"[^"]*"[^' . b:delimiter . ']*' . b:delimiter . '\)\|\%([^' . b:delimiter . ']*\%(' . b:delimiter . '\|$\)\)\)'
