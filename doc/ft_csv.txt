@@ -1,4 +1,4 @@
-*ft_csv.txt*  A plugin for CSV Files                 - Vers 0.3  Oct 28, 2009
+*ft_csv.txt*  A plugin for CSV Files                 - Vers 0.4  Mar 11, 2010
 
 Author:  Christian Brabandt <cb@256bit.org>
 
@@ -15,6 +15,7 @@ differently.
     2.4 HiColumn................................|HiColumn|
     2.5 ArrangeColumn...........................|ArrangeColumn|
     2.6 DeleteColumn............................|DeleteColumn|
+    2.7 InitCSV.................................|InitCSV|
 3. CSV Filetype configuration...................|csv-configuration|
     3.1 Delimiter...............................|csv-delimiter|
     3.2 Column..................................|csv-column|
@@ -100,6 +101,8 @@ Instead of / as delimiter, you can use any other delimiter you like.
 :HiColumn <nr> can be used to highlight Column <nr>. Currently the plugin uses
 the WildMenu Highlight Group. If you would like to change this, you need to
 define the variable |g:csv_hiGroup|.
+If you do not specify a <nr>, HiColumn will hilight the column on which the
+cursor is.
 
 2.5 ArrangeColumn                                           *ArrangeColumn*
 -----------------
@@ -120,6 +123,12 @@ The command :DeleteColumn can be used to delete a specific column.
 
 will delete column 2.
 
+2.7 InitCSV                                                *InitCSV*
+-----------
+
+Reinitialize the Plugin. Use this, if you have changed the configuration
+of the plugin (see *csv-configuration* ).
+
 ==============================================================================
 3. CSV Configuration					  *csv-configuration*
 
@@ -135,9 +144,12 @@ it to define a column. Almost all commands use this variable therefore.
 So to override the automatic detection of the plugin and define the separator
 manually, use:
 
-:let b:delimiter=','
+:let g:csv_delim=','
 
-to let the comma be the delimiter.
+to let the comma be the delimiter. 
+
+If you changed the delimiter, you should reinitiliaze the plugin using
+:InitCSV
 
 3.2 Column                                                  *csv-column*
 ----------
@@ -174,4 +186,3 @@ variable. You can e.g. define it in your .vimrc:
 You need to restart Vim, if you have changed this variable.
 
 vim:tw=78:ts=8:ft=help:norl:
-
