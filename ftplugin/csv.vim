@@ -1,6 +1,13 @@
 " Filetype plugin for editing CSV files."{{{
-" Copyright: C.Brabandt  <cb@256bit.org>
-" Version:   0.4a
+" Author:  Christian Brabandt <cb@256bit.org>
+" Version: 0.5
+" Script:  http://www.vim.org/scripts/script.php?script_id=2830
+" License: VIM License
+" Last Change: Tue, 20 Apr 2010 19:58:49 +0200
+
+" Documentation: see :help ft_csv.txt
+" GetLatestVimScripts: 2830 2 :AutoInstall: csv.vim
+"
 " Some ideas are take from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
 if v:version < 700 || exists('b:did_ftplugin')

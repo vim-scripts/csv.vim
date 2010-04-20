@@ -1,6 +1,11 @@
-*ft_csv.txt*  A plugin for CSV Files                 - Vers 0.4a  Mar 11, 2010
+*ft_csv.txt*  A plugin for CSV Files
 
 Author:  Christian Brabandt <cb@256bit.org>
+Version: 0.5 Tue, 20 Apr 2010 19:58:49 +0200
+Copyright: (c) 2009, 2010 by Christian Brabandt
+           The VIM LICENSE applies to csv.vim and csv.txt
+           (see |copyright|) except use csv instead of "Vim".
+	   NO WARRANTY, EXPRESS OR IMPLIED.  USE AT-YOUR-OWN-RISK.
 
 This is a filetype plugin for CSV files. It was heavily influenced by the Vim
 Wiki Tip667 (http://vim.wikia.com/wiki/VimTip667), though it works
@@ -190,6 +195,10 @@ You need to restart Vim, if you have changed this variable or use |InitCSV|
 ==============================================================================
 4. CSV Changelog					  *csv-changelog*
 
+0.5  Apr, 20     -documentation update
+		 -switched to a public repository:
+		  http://github.com/chrisbra/csv.vim
+		 -enabled GLVS (see |GLVS|)
 0.4a Mar, 11	 -fixed documentation
 0.4  Mar, 11	 -introduce |InitCSV|
 		 -better Error handling
