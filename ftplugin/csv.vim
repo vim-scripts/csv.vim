@@ -1,21 +1,20 @@
-" Filetype plugin for editing CSV files."{{{
+" Filetype plugin for editing CSV files. "{{{
 " Author:  Christian Brabandt <cb@256bit.org>
-" Version: 0.5
+" Version: 0.6
 " Script:  http://www.vim.org/scripts/script.php?script_id=2830
 " License: VIM License
-" Last Change: Tue, 20 Apr 2010 19:58:49 +0200
-
+" Last Change: Wed, 16 Feb 2011 00:00:45 +0100
 " Documentation: see :help ft_csv.txt
-" GetLatestVimScripts: 2830 2 :AutoInstall: csv.vim
+" GetLatestVimScripts: 2830 5 :AutoInstall: csv.vim
 "
 " Some ideas are take from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
 if v:version < 700 || exists('b:did_ftplugin')
   finish
 endif
-let b:did_ftplugin = 1"}}}
+let b:did_ftplugin = 1 "}}}
 
-fu! <SID>GetDelimiter()"{{{
+fu! <SID>GetDelimiter() "{{{
     let _cur = getpos('.')
     let Delim={0: ';', 1:  ','}
     let temp={}
@@ -39,9 +38,8 @@ fu! <SID>GetDelimiter()"{{{
     else
 	return ''
     endif
-endfu"}}}
-
-fu! <SID>HiCol(colnr)"{{{
+endfu "}}}
+fu! <SID>HiCol(colnr) "{{{
     if a:colnr > <SID>MaxColumns()
 	call <SID>echoWarn("There exists no column " . a:colnr)
 	return 1
@@ -71,9 +69,8 @@ fu! <SID>HiCol(colnr)"{{{
     else
         exe ":2match " . s:hiGroup . ' /' . pat . '/'
     endif
-endfu"}}}
-
-fu! <SID>WColumn()"{{{
+endfu "}}}
+fu! <SID>WColumn() "{{{
     " Return on which column the cursor is
     let _cur = getpos('.')
     let line=getline('.')
@@ -81,7 +78,7 @@ fu! <SID>WColumn()"{{{
     " match will return the next column
     " so we move one char left
     if line[col('.')-1] == b:delimiter
-       normal h
+       norm! h
     endif
     call search(b:col, 'e', line('.'))
     let end=col('.')-1
@@ -90,10 +87,13 @@ fu! <SID>WColumn()"{{{
     let i=escape(line[start : end], '\')
     let fields=(split(line,b:col.'\zs'))
     call setpos('.',_cur)
-    return match(fields, '\V'.i)+1
-endfu"}}}
-
-fu! <SID>MaxColumns()"{{{
+    return strlen(substitute(line[0:start], b:col, '-', 'g'))
+    "let i=escape(line[start : end], '\')
+    "let fields=(split(line,b:col.'\zs'))
+    "call setpos('.',_cur)
+    "return match(fields, '\V'.i)+1
+endfu "}}}
+fu! <SID>MaxColumns() "{{{
     "return maximum number of columns in first 10 lines
     let l=getline(1,10)
     let fields=[]
@@ -103,15 +103,13 @@ fu! <SID>MaxColumns()"{{{
 	let result=(temp>result ? temp : result)
     endfor
     return result
-endfu"}}}
-
-fu! <SID>echoWarn(mess)"{{{
+endfu "}}}
+fu! <SID>echoWarn(mess) "{{{
     echohl WarningMsg
     echomsg a:mess
     echohl Normal
-endfu"}}}
-
-fu! <SID>SearchColumn(arg)"{{{
+endfu "}}}
+fu! <SID>SearchColumn(arg) "{{{
     let arglist=split(a:arg)
     let colnr=arglist[0]
     let pat=substitute(arglist[1], '^\(.\)\(.*\)\1$', '\2', '')
@@ -136,10 +134,9 @@ fu! <SID>SearchColumn(arg)"{{{
 	"let @/= '^\zs' . b:col1 . '\?' . pat . '\ze' . b:col1 . '\?' .  <SID>GetColPat(maxcolnr,0) . '$'
 	let @/= '^' . '\%([^' . b:delimiter . ']*\)\?\zs' . pat . '\ze\%([^' . b:delimiter . ']*\)\?' . b:delimiter .  <SID>GetColPat(maxcolnr-1,0) . '$'
     endif
-    normal n
-endfu"}}}
-
-fu! <SID>DelColumn(colnr)"{{{
+    norm! n
+endfu "}}}
+fu! <SID>DelColumn(colnr) "{{{
     let maxcolnr = <SID>MaxColumns()
     if a:colnr > maxcolnr
 	call <SID>echoWarn("There exists no column " . a:colnr)
@@ -153,9 +150,8 @@ fu! <SID>DelColumn(colnr)"{{{
     "let @/ = pat
     "echo pat
     exe ':%s/' . escape(pat, '/') . '//'
-endfu"}}}
-
-fu! <SID>ColWidth(colnr)"{{{
+endfu "}}}
+fu! <SID>ColWidth(colnr) "{{{
     " Return the width of a column
     let list=getline(1,'$')
     let width=20 "Fallback (wild guess)
@@ -172,25 +168,44 @@ fu! <SID>ColWidth(colnr)"{{{
     catch
         return  width
     endtry
-endfu"}}}
-
-fu! <SID>ArrangeCol() range"{{{
+endfu "}}}
+fu! <SID>ArrangeCol() range "{{{
    let _cur=getpos('.')
-   let col_width=[]
-   let max_cols=<SID>MaxColumns()
-   for i in range(1,max_cols)
-       call add(col_width, <SID>ColWidth(i))
-   endfor
 
-   exe ':%s/' . (b:col) . '/\=printf("%-*.*s", (col_width[<SID>WColumn()-1]+1) ,  (col_width[<SID>WColumn()-1]+1) , submatch(0))/g'
+   "exe ':%s/' . (b:col) . '/\=printf("%.' . (<SID>ColWidth(<SID>WColumn())+1) . 's", submatch(0).repeat(" ", (<SID>ColWidth(<SID>WColumn())-strlen(submatch(0)))))/g'
+"   echo ':%s/' . (b:col) . '/\=printf("%*.*s",'  (col_width[<SID>WColumn()-1]+1) ", ". (col_width[<SID>WColumn()-1]+1) . ", submatch(0))"/g'
+   "exe ':%s/' . (b:col) . '/\=printf("%*.*s",' . (col_width[<SID>WColumn()-1]+1) . ", " . (col_width[<SID>WColumn()-1]+1) . ", submatch(0))/g"
+   "exe ':%s/' . (b:col) . '/\=printf("%*.*s",  (<SID>ColWidth(<SID>WColumn())+1) ,  (<SID>ColWidth(<SID>WColumn())+1) , submatch(0))/g'
+   "exe ':%s/' . (b:col) . '/\=printf("%-*.*s", (col_width[<SID>WColumn()-1]+1) ,  (col_width[<SID>WColumn()-1]+1) , submatch(0))/g'
+   exe ':%s/' . (b:col) . '/\=<SID>Columnize(submatch(0))/g'
    " If delimiter is a <Tab>, replace it by Space
-   if b:delimiter ==? "\t"
-       %s/\t/ /g
-   endif
+   "if b:delimiter ==? "\t"
+   "    %s/\t/ /g
+   "endif
    call setpos('.', _cur)
-endfu"}}}
+endfu "}}}
+fu! <SID>Columnize(field) "{{{
+   if !exists("b:col_width")
+	let b:col_width=[]
+	let max_cols=<SID>MaxColumns()
+	for i in range(1,max_cols)
+	    call add(b:col_width, <SID>ColWidth(i))
+	endfor
+   endif
+   " convert zero indexed list to 1 indexed list,
+   " add one as delimiter
+   let width=b:col_width[<SID>WColumn()-1]
+   let a = split(a:field, '\zs')
+   let add = eval(join(map(a, 'len(v:val)'), '+'))
+   let add -= len(a)
+   
+   " Add one for as a frame
+   " add additional width for multibyte chars
+   let width = width + add  + 1
 
-fu! <SID>GetColPat(colnr, zs_flag)"{{{
+   return printf("%*s", width ,  a:field)
+endfun "}}}
+fu! <SID>GetColPat(colnr, zs_flag) "{{{
     if a:colnr > 1
 	"let pat='\%(\%("\%([^"]\|""\)*"\)\|\%([^' . b:delimiter . '"]*\)\)\{' . (a:colnr-1) . '\}'
 	"let pat='\%(\%([^' . b:delimiter . ']*\%("[^"]*"\)\?\)[^' . b:delimiter . ']*'.b:delimiter . '\)\{' . (a:colnr-1) . '\}'
@@ -207,9 +222,66 @@ fu! <SID>GetColPat(colnr, zs_flag)"{{{
     endif
     "return (a:startofline ? '^' : '') . pat
     return pat . (a:zs_flag ? '\zs' : '')
-endfu"}}}
-
-fu! <SID>Init()"{{{
+endfu "}}}
+fu! <SID>SplitHeaderLine(lines, bang) "{{{
+    if !a:bang && !exists("b:CSV_SplitWindow")
+	" Split Window
+	let _stl = &l:stl
+	let _sbo = &sbo
+	setl scrollopt=hor scrollbind
+	let lines = empty(a:lines) ? 1 : a:lines
+	noa sp
+	1
+	exe "resize" . lines
+	setl scrollopt=hor scrollbind
+	"let &l:stl=repeat(' ', winwidth(0))
+	let &l:stl="%#Normal#".repeat(' ',winwidth(0))
+	" Highlight first row
+	call matchadd("Type", b:col)
+	let b:CSV_SplitWindow = winnr()
+	exe "noa wincmd p"
+    else
+	" Close split window
+	if !exists("b:CSV_SplitWindow")
+	    return
+	endif
+	exe "noa" b:CSV_SplitWindow "wincmd w"
+	unlet b:CSV_SplitWindow
+	if exists("_stl")
+	    let &l_stl = _stl
+	endif
+	if exists("_sbo")
+	    let &sbo = _sbo
+	endif
+	setl noscrollbind
+	wincmd c
+    endif
+endfu "}}}
+fu! <SID>Col(forward) "{{{
+    let colnr=<SID>WColumn()
+    "if colnr > 1 && !a:forward
+    if colnr - v:count1 > 1 && !a:forward
+	let colnr -= v:count1
+    elseif colnr - v:count1 < 1 && !a:forward
+	let colnr = 1
+    elseif colnr + v:count1 < <SID>MaxColumns() && a:forward
+	let colnr += v:count1
+    elseif colnr + v:count1 > <SID>MaxColumns() && a:forward
+	let colnr = <SID>MaxColumns()
+    endif
+    if colnr == 1
+	let pat='^'. <SID>GetColPat(colnr,0)
+    else
+	let pat='^'. <SID>GetColPat(colnr-1,1) . b:col
+    endif
+    let pat = pat . '\%' . line('.') . 'l'
+    if a:forward
+	call search(pat, 'cW')
+    else
+	call search(pat, 'bW')
+    endif
+endfun "}}}
+fu! <SID>Init() "{{{
     " Hilight Group for Columns
     if exists("g:csv_hiGroup")
 	let s:hiGroup = g:csv_hiGroup
@@ -229,7 +301,6 @@ fu! <SID>Init()"{{{
     endif
     " Pattern for matching a single column
     let b:col='\%(\%([^' . b:delimiter . ']*"[^"]*"[^' . b:delimiter . ']*' . b:delimiter . '\)\|\%([^' . b:delimiter . ']*\%(' . b:delimiter . '\|$\)\)\)'
-    setl nostartofline tw=0 nowrap
     command! -buffer WhatColumn :echo <SID>WColumn()
     command! -buffer NrColumns :echo <SID>MaxColumns()
     command! -buffer -nargs=? HiColumn :call <SID>HiCol(<q-args>)
@@ -237,10 +308,18 @@ fu! <SID>Init()"{{{
     command! -buffer -nargs=1 DeleteColumn :call <SID>DelColumn(<args>)
     command! -buffer ArrangeColumn :call <SID>ArrangeCol()
     command! -buffer InitCSV :call <SID>Init()
+    command! -buffer -bang -nargs=? Header :call <SID>SplitHeaderLine(<q-args>,<bang>0)
     " undo when setting a new filetype
     let b:undo_ftplugin = "setlocal sol< tw< wrap<"
 	\ . "| unlet b:delimiter b:col"
-endfu"}}}
+    " CSV specific mappings
+    nnoremap <silent> <buffer> W :<C-U>call <sid>Col(1)<CR>
+    nnoremap <silent> <buffer> E :<C-U>call <sid>Col(0)<CR>
+    nnoremap <silent> <buffer> <C-Right> :<C-U>call <sid>Col(1)<CR>
+    nnoremap <silent> <buffer> <C-Left> :<C-U> call <sid>Col(0)<CR>
+    " CSV local settings
+    setl nostartofline tw=0 nowrap
+endfu "}}}
 
 :call <SID>Init()
 
