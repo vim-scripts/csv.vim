@@ -1,11 +1,11 @@
 " Filetype plugin for editing CSV files. "{{{1
 " Author:  Christian Brabandt <cb@256bit.org>
-" Version: 0.7
+" Version: 0.8
 " Script:  http://www.vim.org/scripts/script.php?script_id=2830
 " License: VIM License
-" Last Change: Wed, 16 Feb 2011 23:24:37 +0100
+" Last Change: Thu, 17 Feb 2011 23:06:09 +0100
 " Documentation: see :help ft_csv.txt
-" GetLatestVimScripts: 2830 6 :AutoInstall: csv.vim
+" GetLatestVimScripts: 2830 7 :AutoInstall: csv.vim
 "
 " Some ideas are take from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
@@ -15,6 +15,9 @@ if v:version < 700 || exists('b:did_ftplugin')
   finish
 endif
 let b:did_ftplugin = 1
+
+let s:cpo_save = &cpo
+set cpo&vim
 
 " Function definitions: "{{{2
 fu! <SID>Warn(mess) "{{{3
@@ -30,6 +33,12 @@ fu! <SID>Init() "{{{3
     else
 	let s:hiGroup="WildMenu"
     endif
+    if !exists("g:csv_hiHeader")
+	let s:hiHeader = "Title"
+    else
+	let s:hiHeader = g:csv_hiHeader
+    endif
+    exe "hi link CSVHeaderLine" s:hiHeader
     " Determine default Delimiter
     if !exists("g:csv_delim")
 	let b:delimiter=<SID>GetDelimiter()
@@ -41,9 +50,13 @@ fu! <SID>Init() "{{{3
     endif
     
     " Pattern for matching a single column
-    let b:col='\%(\%([^' . b:delimiter . ']*"[^"]*"[^' . 
-		\ b:delimiter . ']*' . b:delimiter . '\)\|\%([^' . 
-		\ b:delimiter . ']*\%(' . b:delimiter . '\|$\)\)\)'
+    if !exists("g:csv_strict_columns")
+	let b:col='\%(\%([^' . b:delimiter . ']*"[^"]*"[^' . 
+		    \ b:delimiter . ']*' . b:delimiter . '\)\|\%([^' . 
+		    \ b:delimiter . ']*\%(' . b:delimiter . '\|$\)\)\)'
+    else
+	let b:col='\%([^' . b:delimiter . ']*' . b:delimiter . '\|$\)'
+    endif
 
     " define buffer-local commands
     call <SID>CommandDefinitions()
@@ -54,20 +67,43 @@ fu! <SID>Init() "{{{3
     if exists("b:current_syntax")
 	unlet b:current_syntax
 	" Force reloading syntax file
-	exe "silent do Syntax" expand("%")
     endif
+    if !exists("#CSV#ColorScheme")
+	" Make sure, syntax highlighting is applied
+	" after changing the colorscheme
+	augroup CSV
+	    au!
+	    au ColorScheme *.csv,*.dat do Syntax
+	augroup end
+    endif
+    silent do Syntax
 
     " undo when setting a new filetype
     let b:undo_ftplugin = "setlocal sol< tw< wrap<"
 	\ . "| unlet b:delimiter b:col"
+
     " CSV local settings
     setl nostartofline tw=0 nowrap
+    if has("conceal")
+	setl cole=2 cocu=nc
+	let b:undo_ftplugin .= '|setl cole< cocu<'
+    endif
 endfu 
 
 fu! <SID>SearchColumn(arg) "{{{3
-    let arglist=split(a:arg)
-    let colnr=arglist[0]
-    let pat=substitute(arglist[1], '^\(.\)\(.*\)\1$', '\2', '')
+    try 
+	let arglist=split(a:arg)
+	if len(arglist) == 1
+	   let colnr=<SID>WColumn()
+	   let pat=substitute(arglist[0], '^\(.\)\(.*\)\1$', '\2', '')
+	else
+	    let colnr=arglist[0]
+	    let pat=substitute(arglist[1], '^\(.\)\(.*\)\1$', '\2', '')
+	endif
+    catch /^Vim\%((\a\+)\)\=:E684/	" catch error index out of bounds
+	call <SID>Warn("Error! Usage :SearchInColumn [<colnr>] /pattern/")
+	return 1
+    endtry
     let maxcolnr = <SID>MaxColumns()
     if colnr > maxcolnr
 	call <SID>Warn("There exists no column " . colnr)
@@ -89,20 +125,32 @@ fu! <SID>SearchColumn(arg) "{{{3
 	"let @/= '^\zs' . b:col1 . '\?' . pat . '\ze' . b:col1 . '\?' .  <SID>GetColPat(maxcolnr,0) . '$'
 	let @/= '^' . '\%([^' . b:delimiter . ']*\)\?\zs' . pat . '\ze\%([^' . b:delimiter . ']*\)\?' . b:delimiter .  <SID>GetColPat(maxcolnr-1,0) . '$'
     endif
-    norm! n
+    try
+	norm! n
+    catch /^Vim\%((\a\+)\)\=:E486/
+        " Pattern not found
+	echohl Error
+	echomsg "E486: Pattern not found in column " . colnr . ": " . pat 
+	if &vbs > 0
+	    echomsg substitute(v:exception, '^[^:]*:', '','')
+	endif
+	echohl Normal
+    endtry
 endfu
+
 
 fu! <SID>DelColumn(colnr) "{{{3
     let maxcolnr = <SID>MaxColumns()
-    if a:colnr > maxcolnr
-	call <SID>Warn("There exists no column " . a:colnr)
-	return 
-    endif
 
     if empty(a:colnr)
        let colnr=<SID>WColumn()
     else
        let colnr=a:colnr
+    endif
+
+    if colnr > maxcolnr
+	call <SID>Warn("There exists no column " . colnr)
+	return 
     endif
 
     if a:colnr != '1'
@@ -110,24 +158,29 @@ fu! <SID>DelColumn(colnr) "{{{3
     else
 	let pat= '^' . <SID>GetColPat(a:colnr,0) 
     endif
+    if &ro
+       setl noro
+    endif
     exe ':%s/' . escape(pat, '/') . '//'
 endfu
 
 fu! <SID>HiCol(colnr) "{{{3
-    if a:colnr > <SID>MaxColumns()
+    if a:colnr > <SID>MaxColumns() && a:colnr[-1:] != '!'
 	call <SID>Warn("There exists no column " . a:colnr)
 	return
     endif
-    if empty(a:colnr)
-       let colnr=<SID>WColumn()
-    else
-       let colnr=a:colnr
-    endif
+    if a:colnr[-1:] != '!'
+	if empty(a:colnr)
+	   let colnr=<SID>WColumn()
+	else
+	   let colnr=a:colnr
+	endif
 
-    if colnr==1
-	let pat='^'. <SID>GetColPat(colnr,0)
-    else
-	let pat='^'. <SID>GetColPat(colnr-1,1) . b:col
+	if colnr==1
+	    let pat='^'. <SID>GetColPat(colnr,0)
+	else
+	    let pat='^'. <SID>GetColPat(colnr-1,1) . b:col
+	endif
     endif
 
     if exists("*matchadd")
@@ -139,9 +192,14 @@ fu! <SID>HiCol(colnr) "{{{3
 	let matchlist=getmatches()
 	call filter(matchlist, 'v:val["group"] !~ s:hiGroup')
 	call setmatches(matchlist)
+	if a:colnr[-1:] == '!'
+	    return
+	endif
 	let s:matchid=matchadd(s:hiGroup, pat, 0)
     else
-        exe ":2match " . s:hiGroup . ' /' . pat . '/'
+	if a:colnr[-1:] != '!'
+	    exe ":2match " . s:hiGroup . ' /' . pat . '/'
+	endif
     endif
 endfu
 
@@ -197,8 +255,12 @@ endfu
 
 fu! <SID>ColWidth(colnr) "{{{3
     " Return the width of a column
-    let list=getline(1,'$')
+    if !exists("b:buffer_content")
+	let b:csv_list=getline(1,'$')
+	let b:buffer_content=1
+    endif
     let width=20 "Fallback (wild guess)
+    let list=copy(b:csv_list)
     try
 	" we have a list of the first 10 rows
 	" Now transform it to a list of field a:colnr
@@ -209,7 +271,7 @@ fu! <SID>ColWidth(colnr) "{{{3
 	call map(list, 'strlen(v:val)')
 	return max(list)
     catch
-        return  width
+        return width
     endtry
 endfu
 
@@ -219,8 +281,19 @@ fu! <SID>ArrangeCol() range "{{{3
     if exists("b:col_width")
       unlet b:col_width
     endif
+    " Force recalculation of column width
+    if exists("b:buffer_content")
+      unlet b:buffer_content
+    endif
 
-   exe ':%s/' . (b:col) . '/\=<SID>Columnize(submatch(0))/g'
+   if &ro
+       " Just in case, to prevent the Warning 
+       " Warning: W10: Changing read-only file
+       setl noro
+   endif
+   exe a:firstline . ',' . a:lastline .'s/' . (b:col) .
+  \ '/\=<SID>Columnize(submatch(0))/g'
+   setl ro
    call setpos('.', _cur)
 endfu
 
@@ -231,13 +304,22 @@ fu! <SID>Columnize(field) "{{{3
 	for i in range(1,max_cols)
 	    call add(b:col_width, <SID>ColWidth(i))
 	endfor
+	if exists("b:csv_list")
+	    " delete buffer content in variable b:csv_list,
+	    " this was only necessary for calculating the max width
+	    unlet b:csv_list
+	endif
    endif
    " convert zero based indexed list to 1 based indexed list,
    " Default: 20 width, in case that column width isn't defined
    let width=get(b:col_width,<SID>WColumn()-1,20)
-   let a = split(a:field, '\zs')
-   let add = eval(join(map(a, 'len(v:val)'), '+'))
-   let add -= len(a)
+   if !exists("g:csv_no_multibyte")
+       let a = split(a:field, '\zs')
+       let add = eval(join(map(a, 'len(v:val)'), '+'))
+       let add -= len(a)
+   else
+       let add = 0
+   endif
    
    " Add one for the frame
    " plus additional width for multibyte chars,
@@ -270,7 +352,7 @@ fu! <SID>SplitHeaderLine(lines, bang) "{{{3
 	"let &l:stl=repeat(' ', winwidth(0))
 	let &l:stl="%#Normal#".repeat(' ',winwidth(0))
 	" Highlight first row
-	call matchadd("Type", b:col)
+	call matchadd("CSVHeaderLine", b:col)
 	let b:CSV_SplitWindow = winnr()
 	exe "noa wincmd p"
     else
@@ -360,20 +442,20 @@ fu! <SID>CommandDefinitions() "{{{3
     if !exists(":WhatColumn")
 	command! -buffer WhatColumn :echo <SID>WColumn()
     endif
-    if exists(":NrColumns")
+    if !exists(":NrColumns")
 	command! -buffer NrColumns :echo <SID>MaxColumns()
     endif
     if !exists(":HiColumn")
-	command! -buffer -nargs=? HiColumn :call <SID>HiCol(<q-args>)
+	command! -buffer -bang -nargs=? HiColumn :call <SID>HiCol(<q-args>.<q-bang>)
     endif
     if !exists(":SearchInColumn")
 	command! -buffer -nargs=* SearchInColumn :call <SID>SearchColumn(<q-args>)
     endif
     if !exists(":DeleteColumn")
-	command! -buffer -nargs=? DeleteColumn :call <SID>DelColumn(<args>)
+	command! -buffer -nargs=? DeleteColumn :call <SID>DelColumn(<q-args>)
     endif
     if !exists(":ArrangeColumn")
-	command! -buffer ArrangeColumn :call <SID>ArrangeCol()
+	command! -buffer -range ArrangeColumn :<line1>,<line2>call <SID>ArrangeCol()
     endif
     if !exists(":InitCSV")
 	command! -buffer InitCSV :call <SID>Init()
@@ -401,7 +483,9 @@ endfu
 
 " end function definition "}}}2
 " Initialize Plugin "{{{2
-:call <SID>Init()
+call <SID>Init()
+let &cpo = s:cpo_save
+unlet s:cpo_save
 
 " Vim Modeline " {{{2
 " vim: set foldmethod=marker: 
