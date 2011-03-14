@@ -1,11 +1,11 @@
 " Filetype plugin for editing CSV files. "{{{1
 " Author:  Christian Brabandt <cb@256bit.org>
-" Version: 0.12
+" Version: 0.13
 " Script:  http://www.vim.org/scripts/script.php?script_id=2830
 " License: VIM License
-" Last Change: Thu, 24 Feb 2011 22:25:05 +0100
+" Last Change: Mon, 14 Mar 2011 23:05:11 +0100
 " Documentation: see :help ft_csv.txt
-" GetLatestVimScripts: 2830 14 :AutoInstall: csv.vim
+" GetLatestVimScripts: 2830 15 :AutoInstall: csv.vim
 "
 " Some ideas are take from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
@@ -169,6 +169,7 @@ endfu
 
 fu! <SID>DelColumn(colnr) "{{{3
     let maxcolnr = <SID>MaxColumns()
+    let _p = getpos('.')
 
     if empty(a:colnr)
        let colnr=<SID>WColumn()
@@ -190,6 +191,7 @@ fu! <SID>DelColumn(colnr) "{{{3
        setl noro
     endif
     exe ':%s/' . escape(pat, '/') . '//'
+    call setpos('.', _p)
 endfu
 
 fu! <SID>HiCol(colnr) "{{{3
@@ -257,7 +259,7 @@ fu! <SID>GetDelimiter() "{{{3
     endif
 endfu
 
-fu! <SID>WColumn() "{{{3
+fu! <SID>WColumn(...) "{{{3
     " Return on which column the cursor is
     let _cur = getpos('.')
     let line=getline('.')
@@ -266,8 +268,17 @@ fu! <SID>WColumn() "{{{3
     call search(b:col, 'ec')
     let end=col('.')-1
     let fields=(split(line[0:end],b:col.'\zs'))
+    let ret=len(fields)
+    if exists("a:1") && a:1 > 0
+	" bang attribute
+	let head  = split(getline(1),b:col.'\zs')
+	" remove preceeding whitespace
+	let ret   = substitute(head[ret-1], '^\s\+', '', '')
+	" remove delimiter
+	let ret   = substitute(ret, b:delimiter. '$', '', '')
+    endif
     call setpos('.',_cur)
-    return len(fields)
+    return ret
 endfu 
 
 fu! <SID>MaxColumns() "{{{3
@@ -305,7 +316,9 @@ fu! <SID>ColWidth(colnr) "{{{3
 endfu
 
 fu! <SID>ArrangeCol() range "{{{3
-    let _cur=getpos('.')
+    "TODO: Why doesn't that work?
+    " is this because of the range flag?
+    "let cur=winsaveview()
     " Force recalculation of Column width
     if exists("b:col_width")
       unlet b:col_width
@@ -321,9 +334,9 @@ fu! <SID>ArrangeCol() range "{{{3
        setl noro
    endif
    exe a:firstline . ',' . a:lastline .'s/' . (b:col) .
-  \ '/\=<SID>Columnize(submatch(0))/g'
+  \ '/\=<SID>Columnize(submatch(0))/' . (&gd ? '' : 'g')
    setl ro
-   call setpos('.', _cur)
+   "call winrestview(cur)
 endfu
 
 fu! <SID>Columnize(field) "{{{3
@@ -375,7 +388,7 @@ fu! <SID>SplitHeaderLine(lines, bang, hor) "{{{3
 	if a:hor
 	    setl scrollopt=hor scrollbind
 	    let lines = empty(a:lines) ? 1 : a:lines
-	    sp
+	    abo sp
 	    1
 	    exe "resize" . lines
 	    setl scrollopt=hor scrollbind winfixheight
@@ -393,7 +406,7 @@ fu! <SID>SplitHeaderLine(lines, bang, hor) "{{{3
 	    unlet! b:buffer_content
 	    let width = <sid>ColWidth(1)
 	    let b=b:col
-	    vsp +enew
+	    abo vsp +enew
 	    let b:col=b
 	    call append(0, a)
 	    $d _
@@ -436,6 +449,9 @@ endfu
 fu! <SID>MoveCol(forward, line) "{{{3
     let colnr=<SID>WColumn()
     let maxcol=<SID>MaxColumns()
+    let cpos=getpos('.')[2]
+    call search(b:col, 'bc', line('.'))
+    let spos=getpos('.')[2]
 
     " Check for valid column
     " a:forward == 1 : search next col
@@ -470,12 +486,26 @@ fu! <SID>MoveCol(forward, line) "{{{3
     endif
 
     " Search
+    " move left/right
     if a:forward > 0
 	call search(pat, 'W')
     elseif a:forward < 0
 	call search(pat, 'bWe')
-    else
-	call search(pat)
+    " Moving upwards/downwards
+    elseif line >= line('.')
+	call search(pat . '\%' . line . 'l', '', line)
+	" Move to the correct screen column
+	" This is a best effort approach, we might still 
+	" leave the column (if the next column is shorter)
+	let a=getpos('.')
+	let a[2]+=cpos-spos
+	call setpos('.', a)
+    elseif line < line('.')
+	call search(pat . '\%' . line . 'l', 'b', line)
+	" Move to the correct screen column
+	let a=getpos('.')
+	let a[2]+=cpos-spos
+	call setpos('.', a)
     endif
 endfun
 
@@ -513,7 +543,7 @@ endfu
 
 fu! <SID>CommandDefinitions() "{{{3
     if !exists(":WhatColumn")
-	command! -buffer WhatColumn :echo <SID>WColumn()
+	command! -buffer -bang WhatColumn :echo <SID>WColumn(<bang>0)
     endif
     if !exists(":NrColumns")
 	command! -buffer NrColumns :echo <SID>MaxColumns()
@@ -528,7 +558,7 @@ fu! <SID>CommandDefinitions() "{{{3
 	command! -buffer -nargs=? DeleteColumn :call <SID>DelColumn(<q-args>)
     endif
     if !exists(":ArrangeColumn")
-	command! -buffer -range ArrangeColumn :<line1>,<line2>call <SID>ArrangeCol()
+	command! -buffer -range ArrangeColumn :let s:a=winsaveview()|:<line1>,<line2>call <SID>ArrangeCol()|call winrestview(s:a)
     endif
     if !exists(":InitCSV")
 	command! -buffer InitCSV :call <SID>Init()
