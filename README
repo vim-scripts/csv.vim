@@ -29,6 +29,10 @@ This little filetype plugin allows among others:
  -  Move through the columns using the normal mode commands 
     (W forwards, H backwards, K upwards, J downwards)
  -  sets up a nice syntax highlighting, concealing the delimiter, if your Vim supports it
+ -  dynamic filtering (Press enter on a value and all other lines, that don't have this value in this column
+    will be folded away. Press enter on another value and this value will be ANDed to the filter list. Press
+    Backspace to delete the last item from the filter list. Use :Filters to see what filters are actvie)
+ -  Analyze all values of a column (distribution) using :Analyze command
 
 Please read the help on how to use the plugin
  :h ft-csv.txt
