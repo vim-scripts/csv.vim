@@ -31,8 +31,13 @@ This little filetype plugin allows among others:
  -  sets up a nice syntax highlighting, concealing the delimiter, if your Vim supports it
  -  dynamic filtering (Press enter on a value and all other lines, that don't have this value in this column
     will be folded away. Press enter on another value and this value will be ANDed to the filter list. Press
-    Backspace to delete the last item from the filter list. Use :Filters to see what filters are actvie)
+    Backspace to delete the last item from the filter list. Press Space to fold all lines, that have the same value
+    in the current field, Press Enter to fold all lines, that have a different value in the current field.
+    Use :Filters to see what filters are actvie)
  -  Analyze all values of a column (distribution) using :Analyze command
+ -  Insert new records, using :NewRecord command
+ -  Implement a wizard to setup fixed-width CSV files using :CSVFixed
+ -  Hide certain columns, using :VertFold
 
 Please read the help on how to use the plugin
  :h ft-csv.txt
