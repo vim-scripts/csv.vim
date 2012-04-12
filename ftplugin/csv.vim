@@ -1,11 +1,11 @@
 " Filetype plugin for editing CSV files. "{{{1
 " Author:  Christian Brabandt <cb@256bit.org>
-" Version: 0.23
+" Version: 0.24
 " Script:  http://www.vim.org/scripts/script.php?script_id=2830
 " License: VIM License
-" Last Change: Sun, 25 Mar 2012 20:47:21 +0200
+" Last Change: Thu, 12 Apr 2012 21:16:30 +0200
 " Documentation: see :help ft-csv.txt
-" GetLatestVimScripts: 2830 22 :AutoInstall: csv.vim
+" GetLatestVimScripts: 2830 23 :AutoInstall: csv.vim
 "
 " Some ideas are taken from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
@@ -124,6 +124,8 @@ fu! <sid>Init() "{{{3
         " Force reloading syntax file
     endif
     call <sid>DoAutoCommands()
+    " enable CSV Menu
+    call <sid>Menu(1)
     call <sid>DisableFolding()
     silent do Syntax
 
@@ -161,7 +163,7 @@ fu! <sid>Init() "{{{3
  " \ delf <sid>NewRecord | delf <sid>MoveOver | delf <sid>Menu |
  " \ delf <sid>NewDelimiter | delf <sid>DuplicateRows | delf <sid>IN |
  " \ delf <sid>SaveOptions | delf <sid>CheckDuplicates |
- " \ delf <sid>CompleteColumnNr | delf <sid>CSVPat
+ " \ delf <sid>CompleteColumnNr | delf <sid>CSVPat | delf <sid>Transpose
 endfu
 
 fu! <sid>DoAutoCommands() "{{{3
@@ -302,6 +304,29 @@ fu! <sid>SearchColumn(arg) "{{{3
 endfu
 
 
+fu! <sid>DeleteColumn(arg) "{{{3
+    let _wsv = winsaveview()
+    if a:arg =~ '^[/]'
+        let i = 0
+        let pat = a:arg[1:]
+        call cursor(1,1)
+        while search(pat, 'cW')
+            " Delete matching column
+            sil call <sid>DelColumn('')
+            let i+=1
+        endw
+    else
+        let i = 1
+        sil call <sid>DelColumn(a:arg)
+    endif
+    if i > 1
+        call <sid>Warn(printf("%d columns deleted", i))
+    else
+        call <sid>Warn("1 column deleted")
+    endif
+    call winrestview(_wsv)
+endfu
+
 fu! <sid>DelColumn(colnr) "{{{3
     let maxcolnr = <SID>MaxColumns()
     let _p = getpos('.')
@@ -328,10 +353,16 @@ fu! <sid>DelColumn(colnr) "{{{3
         let pat= '^' . <SID>GetColPat(colnr,0)
     endif
     if &ro
-       setl noro
+        let ro = 1
+        setl noro
+    else
+        let ro = 0
     endif
     exe ':%s/' . escape(pat, '/') . '//'
     call setpos('.', _p)
+    if ro
+        setl ro
+    endif
 endfu
 
 fu! <sid>HiCol(colnr, bang) "{{{3
@@ -441,23 +472,35 @@ fu! <sid>WColumn(...) "{{{3
     return ret
 endfu
 
-fu! <sid>MaxColumns() "{{{3
+fu! <sid>MaxColumns(...) "{{{3
+    if exists("a:0") && a:0 == 1
+        let this_col = 1
+    else
+        let this_col = 0
+    endif
     "return maximum number of columns in first 10 lines
     if !exists("b:csv_fixed_width_cols")
-        let i=1
+        if this_col
+            let i = a:1
+        else
+            let i = 1
+        endif
         while 1
             let l = getline(i, i+10)
 
             " Filter comments out
             let pat = '^\s*\V'. escape(b:csv_cmt[0], '\\')
             call filter(l, 'v:val !~ pat')
-            if !empty(l)
+            if !empty(l) || this_col
                 break
             else
                 let i+=10
             endif
         endw
 
+        if empty(l)
+            throw 'csv:no_col'
+        endif
         let fields=[]
         let result=0
         for item in l
@@ -524,13 +567,19 @@ fu! <sid>ArrangeCol(first, last, bang) range "{{{3
     if &ro
        " Just in case, to prevent the Warning
        " Warning: W10: Changing read-only file
+       let ro = 1
        setl noro
+    else
+       let ro = 0
     endif
     exe a:first . ',' . a:last .'s/' . (b:col) .
     \ '/\=<SID>Columnize(submatch(0))/' . (&gd ? '' : 'g')
     " Clean up variables, that were only needed for <sid>Columnize() function
     unlet! s:columnize_count s:max_cols s:prev_line
-    setl ro
+    if ro
+        setl ro
+        unlet ro
+    endif
     call winrestview(cur)
 endfu
 
@@ -589,7 +638,6 @@ fu! <sid>Columnize(field) "{{{3
         let s:columnize_count = 0
     endif
 
-
     if !exists("s:max_cols")
         let s:max_cols = len(b:col_width)
     endif
@@ -602,7 +650,7 @@ fu! <sid>Columnize(field) "{{{3
     " convert zero based indexed list to 1 based indexed list,
     " Default: 20 width, in case that column width isn't defined
     " Careful: Keep this fast! Using
-    "let width=get(b:col_width,<SID>WColumn()-1,20)
+    " let width=get(b:col_width,<SID>WColumn()-1,20)
     " is too slow, so we are using:
     let width=get(b:col_width, (s:columnize_count % s:max_cols), 20)
 
@@ -617,17 +665,17 @@ fu! <sid>Columnize(field) "{{{3
         let add = 0
     endif
 
-    if width + add + 1 == strlen(a:field)
-        " Column has correct length, don't use printf()
-        return a:field
-    endif
-
     " Add one for the frame
     " plus additional width for multibyte chars,
     " since printf(%*s..) uses byte width!
     let width = width + add  + 1
 
-    return printf("%*s", width ,  a:field)
+    if width == strlen(a:field)
+        " Column has correct length, don't use printf()
+        return a:field
+    else
+        return printf("%*s", width ,  a:field)
+    endif
 endfun
 
 fu! <sid>GetColPat(colnr, zs_flag) "{{{3
@@ -648,9 +696,9 @@ fu! <sid>GetColPat(colnr, zs_flag) "{{{3
         let pat=b:col
     else
         let pat='\%' . b:csv_fixed_width_cols[0] . 'c.\{-}' .
-            \ len(b:csv_fixed_width_cols) > 1 ?
+            \ (len(b:csv_fixed_width_cols) > 1 ?
             \ '\%' . b:csv_fixed_width_cols[1] . 'c' :
-            \ ''
+            \ '')
     endif
     return pat . (a:zs_flag ? '\zs' : '')
 endfu
@@ -1200,31 +1248,33 @@ fu! <sid>PrepareFolding(add, match)  "{{{3
         let max = <sid>MaxColumns()
         let a   = <sid>GetColumn(line('.'), col)
 
-        try
-            " strip leading whitespace
-            if (a =~ '\s\+'. b:delimiter . '$')
-                let b = split(a, '^\s\+\ze[^' . b:delimiter. ']\+')[0]
-            else
-                let b = a
-            endif
-        catch /^Vim\%((\a\+)\)\=:E684/
-            " empty pattern - should match only empty columns
-            let b = a
-        endtry
-
-        " strip trailing delimiter
-        try
-            let a = split(b, b:delimiter . '$')[0]
-        catch /^Vim\%((\a\+)\)\=:E684/
-            let a = b
-        endtry
-
-        if a == b:delimiter
+        if !exists("b:csv_fixed_width")
             try
-                let a=repeat(' ', <sid>ColWidth(col))
-            catch
-                " no-op
+                " strip leading whitespace
+                if (a =~ '\s\+'. b:delimiter . '$')
+                    let b = split(a, '^\s\+\ze[^' . b:delimiter. ']\+')[0]
+                else
+                    let b = a
+                endif
+            catch /^Vim\%((\a\+)\)\=:E684/
+                " empty pattern - should match only empty columns
+                let b = a
             endtry
+
+            " strip trailing delimiter
+            try
+                let a = split(b, b:delimiter . '$')[0]
+            catch /^Vim\%((\a\+)\)\=:E684/
+                let a = b
+            endtry
+
+            if a == b:delimiter
+                try
+                    let a=repeat(' ', <sid>ColWidth(col))
+                catch
+                    " no-op
+                endtry
+            endif
         endif
 
         " Make a column pattern
@@ -1623,12 +1673,12 @@ endfu
 fu! <sid>CommandDefinitions() "{{{3
     call <sid>LocalCmd("WhatColumn", ':echo <sid>WColumn(<bang>0)',
         \ '-bang')
-    call <sid>LocalCmd("NrColumns", ':echo <sid>MaxColumns()', '')
+    call <sid>LocalCmd("NrColumns", ':call <sid>NrColumns(<q-bang>)', '-bang')
     call <sid>LocalCmd("HiColumn", ':call <sid>HiCol(<q-args>,<bang>0)',
         \ '-bang -nargs=?')
     call <sid>LocalCmd("SearchInColumn",
         \ ':call <sid>SearchColumn(<q-args>)', '-nargs=*')
-    call <sid>LocalCmd("DeleteColumn", ':call <sid>DelColumn(<q-args>)',
+    call <sid>LocalCmd("DeleteColumn", ':call <sid>DeleteColumn(<q-args>)',
         \ '-nargs=? -complete=custom,<sid>SortComplete')
     call <sid>LocalCmd("ArrangeColumn",
         \ ':call <sid>ArrangeCol(<line1>, <line2>, <bang>0)',
@@ -1675,6 +1725,8 @@ fu! <sid>CommandDefinitions() "{{{3
         \ '-nargs=1')
     call <sid>LocalCmd("Duplicates", ':call <sid>CheckDuplicates(<q-args>)',
         \ '-nargs=1 -complete=custom,<sid>CompleteColumnNr')
+    call <sid>LocalCmd('Transpose', ':call <sid>Transpose(<line1>, <line2>)',
+        \ '-range=%')
 endfu
 
 fu! <sid>Map(map, name, definition) "{{{3
@@ -1722,10 +1774,11 @@ fu! <sid>Menu(enable) "{{{3
         amenu CSV.&Toggle\ Header           :HeaderToggle<cr>
         amenu CSV.&ConvertData              :ConvertData<cr>
         amenu CSV.Filters                   :Filters<cr>
-        amenu CSV.Hide\ C&olumn           :VertFold<cr>
+        amenu CSV.Hide\ C&olumn             :VertFold<cr>
         amenu CSV.&New\ Record              :NewRecord<cr>
     else
-        amenu disable CSV
+        " just in case the Menu wasn't defined properly
+        sil! amenu disable CSV
     endif
 endfu
 
@@ -1829,6 +1882,100 @@ fu! <sid>CheckDuplicates(list) "{{{3
     let list=split(string, ',')
     call <sid>DuplicateRows(list)
 endfu
+
+fu! <sid>Transpose(line1, line2) "{{{3
+    " Note: - Comments will be deleted.
+    "       - Does not work with fixed-width columns
+    if exists("b:csv_fixed_width")
+        call <sid>Warn("Transposing does not work with fixed-width columns!")
+        return
+    endif
+    let _wsv    = winsaveview()
+    let TrailingDelim = 0
+
+    if line('$') > 1
+        let TrailingDelim = getline(1) =~ b:delimiter.'$'
+    endif
+    
+    let pat = '^\s*\V'. escape(b:csv_cmt[0], '\\')
+
+    try
+        let columns = <sid>MaxColumns(a:line1)
+    catch
+        " No column, probably because of comment or empty line
+        " so use the number of columns from the beginning of the file
+        let columns = <sid>MaxColumns()
+    endtry
+    let matrix  = []
+    for line in range(a:line1, a:line2)
+        " Filter comments out
+        if getline(line) =~ pat
+            continue
+        endif
+        let r   = []
+        for row in range(1,columns)
+            let field = <sid>GetColumn(line, row)
+            call add(r, field)
+        endfor
+        call add(matrix, r)
+    endfor
+    unlet row
+
+    " create new transposed matrix
+    let transposed = []
+    for row in matrix
+        let i = 0
+        for val in row
+            if get(transposed, i, []) == []
+                call add(transposed, [])
+            endif
+            if val[-1:] != b:delimiter
+                let val .= b:delimiter
+            endif
+            call add(transposed[i], val)
+            let i+=1
+        endfor
+    endfor
+    " Save memory
+    unlet! matrix
+    call map(transposed, 'join(v:val, '''')')
+    if !TrailingDelim
+        call map(transposed, 'substitute(v:val, b:delimiter.''\?$'', "", "")')
+    endif
+    " filter out empty records
+    call filter(transposed, 'v:val != b:delimiter')
+
+    " Insert transposed data
+    let delete_last_line = 0
+    if a:line1 == 1 && a:line2 == line('$')
+        let delete_last_line = 1
+    endif
+    exe a:line1. ",". a:line2. "d _"
+    let first = (a:line1 > 0 ? (a:line1 - 1) : 0)
+    call append(first, transposed)
+    if delete_last_line
+        sil $d _
+    endif
+    " save memory
+    unlet! transposed
+    call winrestview(_wsv)
+endfu
+
+
+fu! <sid>NrColumns(bang) "{{{3
+    if !empty(a:bang)
+        try
+            let cols = <sid>MaxColumns(line('.'))
+        catch
+            " No column or comment line
+            call <sid>Warn("No valid CSV Column!")
+        endtry
+    else
+        let cols = <sid>MaxColumns()
+    endif
+    echo cols
+endfu    
+
 fu! CSVPat(colnr, ...) "{{{3
     " Make sure, we are working in a csv file
     if &ft != 'csv'
