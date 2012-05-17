@@ -1,11 +1,11 @@
 " Filetype plugin for editing CSV files. "{{{1
 " Author:  Christian Brabandt <cb@256bit.org>
-" Version: 0.24
+" Version: 0.25
 " Script:  http://www.vim.org/scripts/script.php?script_id=2830
 " License: VIM License
-" Last Change: Thu, 12 Apr 2012 21:16:30 +0200
+" Last Change: Thu, 17 May 2012 21:07:04 +0200
 " Documentation: see :help ft-csv.txt
-" GetLatestVimScripts: 2830 23 :AutoInstall: csv.vim
+" GetLatestVimScripts: 2830 24 :AutoInstall: csv.vim
 "
 " Some ideas are taken from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
@@ -233,8 +233,8 @@ fu! <sid>GetPat(colnr, maxcolnr, pat) "{{{3
     if a:colnr > 1 && a:colnr < a:maxcolnr
         if !exists("b:csv_fixed_width_cols")
             return '^' . <SID>GetColPat(a:colnr-1,0) . '\%([^' .
-                \ b:delimiter . ']*\)\?\zs' . a:pat . '\ze' .
-                \ '\%([^' . b:delimiter .']*\)\?' .
+                \ b:delimiter . ']\{-}\)\?\zs' . a:pat . '\ze' .
+                \ '\%([^' . b:delimiter .']\{-}\)\?' .
                 \ b:delimiter . <SID>GetColPat(a:maxcolnr - a:colnr, 0) .
                 \ '$'
         else
@@ -246,14 +246,14 @@ fu! <sid>GetPat(colnr, maxcolnr, pat) "{{{3
         if !exists("b:csv_fixed_width_cols")
             return '^' . <SID>GetColPat(a:colnr - 1,0) .
                 \ '\%([^' . b:delimiter .
-                \ ']*\)\?\zs' . a:pat . '\ze'
+                \ ']\{-}\)\?\zs' . a:pat . '\ze'
         else
             return '\%' . b:csv_fixed_width_cols[-1] .
                 \ 'c\zs' . a:pat . '\ze'
         endif
     else " colnr = 1
         if !exists("b:csv_fixed_width_cols")
-            return '^' . '\%([^' . b:delimiter . ']*\)\?\zs' . a:pat .
+            return '^' . '\%([^' . b:delimiter . ']\{-}\)\?\zs' . a:pat .
             \ '\ze\%([^' . b:delimiter . ']*\)\?' . b:delimiter .
             \ <SID>GetColPat(a:maxcolnr -1 , 0) . '$'
         else
@@ -273,11 +273,32 @@ fu! <sid>SearchColumn(arg) "{{{3
                 throw "E684"
             endif
         else
-            let colnr=arglist[0]
-            let pat=substitute(arglist[1], '^\(.\)\(.*\)\1$', '\2', '')
-            if pat == arglist[1]
-                throw "E684"
+            " Determine whether the first word in the argument is a number 
+            " (of the column to search).
+            let colnr = substitute( a:arg, '^\s*\(\d\+\)\s.*', '\1', '' )
+            " If it is _not_ a number,
+            if colnr == a:arg
+                " treat the whole argument as the pattern.
+                let pat = substitute(a:arg,
+                    \ '^\s*\(\S\)\(.*\)\1\s*$', '\2', '' )
+                if pat == a:arg
+                    throw "E684"
+                endif
+                let colnr = <SID>WColumn()
+            else
+                " if the first word tells us the number of the column,
+                " treat the rest of the argument as the pattern.
+                let pat = substitute(a:arg,
+                    \ '^\s*\d\+\s*\(\S\)\(.*\)\1\s*$', '\2', '' )
+                if pat == a:arg
+                    throw "E684"
+                endif
             endif
+"             let colnr=arglist[0]
+"             let pat=substitute(arglist[1], '^\(.\)\(.*\)\1$', '\2', '')
+"             if pat == arglist[1]
+"                 throw "E684"
+"             endif
         endif
     "catch /^Vim\%((\a\+)\)\=:E684/
     catch /E684/	" catch error index out of bounds
