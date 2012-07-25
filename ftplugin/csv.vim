@@ -1,11 +1,11 @@
 " Filetype plugin for editing CSV files. "{{{1
 " Author:  Christian Brabandt <cb@256bit.org>
-" Version: 0.25
+" Version: 0.26
 " Script:  http://www.vim.org/scripts/script.php?script_id=2830
 " License: VIM License
-" Last Change: Thu, 17 May 2012 21:07:04 +0200
+" Last Change: Wed, 25 Jul 2012 22:22:28 +0200
 " Documentation: see :help ft-csv.txt
-" GetLatestVimScripts: 2830 24 :AutoInstall: csv.vim
+" GetLatestVimScripts: 2830 25 :AutoInstall: csv.vim
 "
 " Some ideas are taken from the wiki http://vim.wikia.com/wiki/VimTip667
 " though, implementation differs.
@@ -96,17 +96,8 @@ fu! <sid>Init() "{{{3
         let b:col = g:csv_col
     endif
     
-    " undo when setting a new filetype
-    let b:undo_ftplugin = "setlocal sol< tw< wrap<"
-        \ . "| setl fen< fdm< fdl< fdc< fml<"
-
-    " CSV local settings
-    setl nostartofline tw=0 nowrap
-
-    if has("conceal")
-        setl cole=2 cocu=nc
-        let b:undo_ftplugin .= '| setl cole< cocu< '
-    endif
+    " set filetype specific options
+    call <sid>LocalSettings('all')
 
     " define buffer-local commands
     call <SID>CommandDefinitions()
@@ -135,10 +126,12 @@ fu! <sid>Init() "{{{3
         \ . "| unlet! b:csv_fixed_width b:csv_list b:col_width"
         \ . "| unlet! b:csv_SplitWindow b:csv_headerline"
         \ . "| unlet! b:csv_thousands_sep b:csv_decimal_sep"
+        \. " | unlet! b:browsefilter"
 
  " Delete all functions
  " disabled currently, because otherwise when switching ft
- "          I think, the functions wouldn't be available anymore
+ "          I think, all functions need to be read in again and this
+ "          costs time.
  "
  " let b:undo_ftplugin .= "| delf <sid>Warn | delf <sid>Init |
  " \ delf <sid>GetPat | delf <sid>SearchColumn | delf <sid>DelColumn |
@@ -163,7 +156,41 @@ fu! <sid>Init() "{{{3
  " \ delf <sid>NewRecord | delf <sid>MoveOver | delf <sid>Menu |
  " \ delf <sid>NewDelimiter | delf <sid>DuplicateRows | delf <sid>IN |
  " \ delf <sid>SaveOptions | delf <sid>CheckDuplicates |
- " \ delf <sid>CompleteColumnNr | delf <sid>CSVPat | delf <sid>Transpose
+ " \ delf <sid>CompleteColumnNr | delf <sid>CSVPat | delf <sid>Transpose |
+ " \ delf <sid>LocalSettings()
+endfu
+
+fu! <sid>LocalSettings(type) "{{{3
+    if a:type == 'all'
+        " CSV local settings
+        setl nostartofline tw=0 nowrap
+
+        " undo when setting a new filetype
+        let b:undo_ftplugin = "setlocal sol& tw< wrap<"
+
+        " Set browsefilter
+        if (v:version > 703 || (v:version == 703 && has("patch593")))
+                    \ && exists("browsefilter")
+            let b:browsefilter="CSV Files (*.csv, *.dat)\t*.csv;*.dat\n".
+                 \ "All Files\t*.*\n"
+        endif
+
+        if has("conceal")
+            setl cole=2 cocu=nc
+            let b:undo_ftplugin .= '| setl cole< cocu< '
+        endif
+    endif
+
+    if a:type == 'all' || a:type == 'fold'
+        " Be sure to also fold away single screen lines
+        setl fen fdm=expr fdl=0 fdc=2 fml=0
+
+        let &foldtext=strlen(v:folddashes) . ' lines hidden'
+        setl fillchars-=fold:-
+        " undo settings:
+        let b:undo_ftplugin .=
+        \ "| setl fen< fdm< fdl< fdc< fml< fdt&vim fcs& fde<"
+    endif
 endfu
 
 fu! <sid>DoAutoCommands() "{{{3
@@ -223,6 +250,7 @@ fu! <sid>DoAutoCommands() "{{{3
             au FileType csv call <sid>Menu(1)
             au BufEnter <buffer> call <sid>Menu(1) " enable
             au BufLeave <buffer> call <sid>Menu(0) " disable
+            au BufNewFile,BufNew * call <sid>Menu(0)
         augroup END
         "let b:undo_ftplugin .= '| sil! amenu disable CSV'
         let b:undo_ftplugin .= '| sil! call <sid>Menut(0)'
@@ -563,8 +591,18 @@ fu! <sid>ColWidth(colnr) "{{{3
             throw "ColWidth-error"
             return width
         endtry
-    elseif a:colnr > 0
-        return b:csv_fixed_width_cols[a:colnr] - b:csv_fixed_width_cols[(a:colnr - 1)]
+    else
+        let cols = len(b:csv_fixed_width_cols)
+        if a:colnr == cols
+            return strlen(substitute(getline('$'), '.', 'x', 'g')) -
+                \ b:csv_fixed_width_cols[cols-1] + 1
+        elseif a:colnr < cols && a:colnr > 0
+            return b:csv_fixed_width_cols[a:colnr] -
+                \ b:csv_fixed_width_cols[(a:colnr - 1)]
+        else
+            throw "ColWidth-error"
+            return 0
+        endif
     endif
 endfu
 
@@ -740,22 +778,28 @@ fu! <sid>SplitHeaderLine(lines, bang, hor) "{{{3
         " Split Window
         let _stl = &l:stl
         let _sbo = &sbo
+        let a = []
+        let b=b:col
         if a:hor
             setl scrollopt=hor scrollbind
             let lines = empty(a:lines) ? s:csv_fold_headerline : a:lines
-            abo sp
+            let a = getline(1,lines)
+            " Does it make sense to use the preview window?
+            " sil! pedit %
+            sp +enew
+            call setline(1, a)
+            " Needed for syntax highlighting
+            "let b:col=b
+            "setl syntax=csv
+            sil! doautocmd FileType csv
             1
             exe "resize" . lines
-            setl scrollopt=hor scrollbind winfixheight
+            setl scrollopt=hor winfixheight nowrap
             "let &l:stl=repeat(' ', winwidth(0))
             let &l:stl="%#Normal#".repeat(' ',winwidth(0))
-            " Highlight first row
-            let win = winnr()
         else
             setl scrollopt=ver scrollbind
             0
-            let b=b:col
-            let a=[]
             let a=<sid>CopyCol('',1)
             " Force recalculating columns width
             unlet! b:csv_list
@@ -764,21 +808,26 @@ fu! <sid>SplitHeaderLine(lines, bang, hor) "{{{3
             catch /ColWidth/
                 call <sid>Warn("Error: getting Column Width, using default!")
             endtry
-            let b=b:col
+            " Does it make sense to use the preview window?
+            "vert sil! pedit |wincmd w | enew!
             abo vsp +enew
-            let b:col=b
             call append(0, a)
             $d _
             sil %s/.*/\=printf("%.*s", width, submatch(0))/eg
             0
             exe "vert res" width
-            setl scrollopt=ver scrollbind winfixwidth
-            setl buftype=nowrite bufhidden=hide noswapfile nobuflisted
-            let win = winnr()
+            let b:col=b
+            call matchadd("CSVHeaderLine", b:col)
+            setl scrollopt=ver winfixwidth
         endif
-        call matchadd("CSVHeaderLine", b:col)
-        exe "wincmd p"
+        let win = winnr()
+        setl scrollbind buftype=nowrite bufhidden=wipe noswapfile nobuflisted
+        wincmd p
         let b:csv_SplitWindow = win
+        aug CSV_Preview
+            au!
+            au BufWinLeave <buffer> call <sid>SplitHeaderLine(0, 1, 0)
+        aug END
     else
         " Close split window
         if !exists("b:csv_SplitWindow")
@@ -786,14 +835,19 @@ fu! <sid>SplitHeaderLine(lines, bang, hor) "{{{3
         endif
         exe b:csv_SplitWindow . "wincmd w"
         if exists("_stl")
-            let &l_stl = _stl
+            let &l:stl = _stl
         endif
         if exists("_sbo")
             let &sbo = _sbo
         endif
         setl noscrollbind
         wincmd c
+        "pclose!
         unlet! b:csv_SplitWindow
+        aug CSV_Preview
+            au!
+        aug END
+        aug! CSV_Preview
     endif
 endfu
 
@@ -1305,7 +1359,7 @@ fu! <sid>PrepareFolding(add, match)  "{{{3
             \ '\)'
 
         let s:filter_count += 1
-        let b:csv_filter[col] = { 'pat': b, 'id': s:filter_count,
+        let b:csv_filter[s:filter_count] = { 'pat': b, 'id': s:filter_count,
             \ 'col': col, 'orig': a, 'match': a:match}
 
     endif
@@ -1316,14 +1370,12 @@ fu! <sid>PrepareFolding(add, match)  "{{{3
 "        let @/ .= val.pat . (val.id == s:filter_count ? '' : '\&')
 "    endfor
     let sid = <sid>GetSID()
+
+    " Fold settings:
+    call <sid>LocalSettings('fold')
     " Don't put spaces between the arguments!
     exe 'setl foldexpr=<snr>' . sid . '_FoldValue(v:lnum,b:csv_filter)'
-    "setl foldexpr=s:FoldValue(v:lnum,@/)
-    " Be sure to also fold away single screen lines
-    setl fen fdm=expr fdl=0 fdc=2 fml=0
-    "setl foldtext=substitute(v:folddashes,'-','\ ','g')
-    let &foldtext=strlen(v:folddashes) . ' lines hidden'
-    setl fillchars-=fold:-
+
     " Move folded area to the bottom, so there is only on consecutive
     " non-folded area
     if exists("s:csv_move_folds") && s:csv_move_folds
@@ -1612,7 +1664,12 @@ fu! <sid>NewRecord(line1, line2, count) "{{{3
     for item in range(1,<sid>MaxColumns())
         if !exists("b:col_width")
             " Best guess width
-            let record .= printf("%20s", b:delimiter)
+            if exists("b:csv_fixed_width_cols")
+                let record .= printf("%*s", <sid>ColWidth(item),
+                            \ b:delimiter)
+            else
+                let record .= printf("%20s", b:delimiter)
+            endif
         else
             let record .= printf("%*s", b:col_width[item-1]+1, b:delimiter)
         endif
@@ -1748,6 +1805,7 @@ fu! <sid>CommandDefinitions() "{{{3
         \ '-nargs=1 -complete=custom,<sid>CompleteColumnNr')
     call <sid>LocalCmd('Transpose', ':call <sid>Transpose(<line1>, <line2>)',
         \ '-range=%')
+    call <sid>LocalCmd('Tabularize', ':call <sid>Tabularize()','')
 endfu
 
 fu! <sid>Map(map, name, definition) "{{{3
@@ -1995,7 +2053,44 @@ fu! <sid>NrColumns(bang) "{{{3
         let cols = <sid>MaxColumns()
     endif
     echo cols
-endfu    
+endfu
+
+fu! <sid>Tabularize() "{{{3
+    let _c = winsaveview()
+    let _ma = &l:ma
+    setl ma
+    call <sid>CheckHeaderLine()
+    if exists("b:csv_fixed_width_cols")
+        let cols=copy(b:csv_fixed_width_cols)
+        let pat = join(map(cols, ' ''\(\%''. v:val. ''c\)'' '), '\|')
+        let colwidth = strlen(substitute(getline('$'), '.', 'x', 'g'))
+    else
+        sil call <sid>ArrangeCol(1, line('$'), 1)
+    endif
+
+    if s:csv_fold_headerline > 0
+        call <sid>NewRecord(s:csv_fold_headerline, s:csv_fold_headerline, 1)
+        exe 'sil '. (s:csv_fold_headerline+1).
+            \ 's/\s\+/\=repeat("-", strlen(submatch(0)))/g'
+    endif
+    if exists("b:csv_fixed_width_cols")
+        " There is no delimiter:
+        exe 'sil %s/'. pat. '/|/ge'
+    else
+        exe 'sil %s/'. b:delimiter. '/|/ge'
+    endif
+    " Add vertical bar in first column, if there isn't already one
+    sil %s/^[^|]/|&/e
+    " And add a final vertical bar, if there isn't already
+    sil %s/[^|]$/&|/e
+    let colwidth = strlen(substitute(getline('$'), '.', 'x', 'g'))
+    for line in [0, line('$')+1]
+        call append(line, repeat('-', colwidth))
+    endfor
+    syn clear
+    let &l:ma = _ma
+    call winrestview(_c)
+endfu
 
 fu! CSVPat(colnr, ...) "{{{3
     " Make sure, we are working in a csv file
