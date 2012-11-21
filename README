@@ -9,6 +9,8 @@ This is a filetype plugin for CSV files. It was heavily influenced by
 the Vim Wiki Tip667 (http://vim.wikia.com/wiki/VimTip667), though it           
 works differently.
 
+Also you can create ascii tables using :Table
+
 For a screenshot, of  how the plugin can be used, see
 http://www.256bit.org/~chrisbra/csv.gif
 
@@ -38,6 +40,7 @@ This little filetype plugin allows among others:
  -  Insert new records, using :NewRecord command
  -  Implement a wizard to setup fixed-width CSV files using :CSVFixed
  -  Hide certain columns, using :VertFold
+-   :Table to create ascii type tables (this function is available as plugin for all filetypes)
 
 Please read the help on how to use the plugin
  :h ft-csv.txt
